@@ -11,6 +11,8 @@ def send_telegram_message(message):
         "parse_mode": "Markdown"
     }
     response = requests.post(url, data=data)
+    # ✅ 打印返回结果到 GitHub Actions 日志中
+    print("Telegram response:", response.status_code, response.text)
     return response.json()
 
 def fetch_ceo_buys():
