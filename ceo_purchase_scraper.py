@@ -4,10 +4,10 @@ from datetime import datetime
 import time
 
 class CEOPurchaseScraper:
-    def __init__(self, pages=10):
+    def __init__(self):
         self.base_url = "http://openinsider.com/screener"
         self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        self.pages = pages
+        self.max_retries = 3
 
     def get_today_date(self):
         return datetime.now().strftime('%Y-%m-%d')
@@ -31,30 +31,30 @@ class CEOPurchaseScraper:
         today = self.get_today_date()
         results = []
 
-        for page in range(1, self.pages+1):
-            params = {
-                'fd': '1',
-                'td': '0',
-                'xp': '1',
-                'xs': '1',
-                'vl': '100',
-                'insider': 'CEO',
-                'sortcol': 0,
-                'cnt': 100,
-                'page': page
-            }
+        params = {
+            'fd': '1',
+            'td': '0',
+            'xp': '1',
+            'xs': '1',
+            'vl': '100',
+            'insider': 'CEO',
+            'sortcol': 0,
+            'cnt': 500,
+            'page': 1
+        }
 
+        for attempt in range(self.max_retries):
             try:
-                resp = requests.get(self.base_url, params=params, headers=self.headers)
+                resp = requests.get(self.base_url, params=params, headers=self.headers, timeout=10)
                 resp.raise_for_status()
                 soup = BeautifulSoup(resp.content, 'html.parser')
                 table = soup.find('table', {'class': 'tinytable'})
                 if not table:
-                    break
+                    return []
 
                 rows = table.find_all('tr')[1:]
                 if not rows:
-                    break
+                    return []
 
                 for row in rows:
                     cells = row.find_all('td')
@@ -94,12 +94,14 @@ class CEOPurchaseScraper:
                         'detail_link': detail_link
                     })
 
+                time.sleep(0.5)
+                break  # 成功爬取就退出 retry 循环
+
             except Exception as e:
-                print(f"Error parsing page {page}: {e}")
+                print(f"尝试第 {attempt + 1} 次请求失败: {e}")
                 time.sleep(1)
                 continue
 
-            time.sleep(0.5)
-
         results.sort(key=lambda x: x['shares_int'], reverse=True)
         return results
+
