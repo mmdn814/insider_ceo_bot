@@ -2,8 +2,12 @@ from ceo_purchase_scraper import CEOPurchaseScraper
 from telegram_push import send_telegram_message
 
 def main():
-    scraper = CEOPurchaseScraper(pages=10)
-    results = scraper.fetch_data()
+    scraper = CEOPurchaseScraper()
+    try:
+        results = scraper.fetch_data()
+    except Exception as e:
+        send_telegram_message(f"🚨 爬取发生严重错误: {e}")
+        return
 
     if not results:
         send_telegram_message("😕 今天没有 CEO 买入记录")
@@ -24,4 +28,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
