@@ -1,74 +1,21 @@
-import requests
-from bs4 import BeautifulSoup
-from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
-from datetime import datetime
-
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    response = requests.post(url, data=data)
-    print("Telegram response:", response.status_code, response.text)
-    return response.json()
-
-def fetch_ceo_buys():
-    url = "http://openinsider.com/screener?s=&o=&pl=&ph=&ll=&lh=&fd=1&td=0&xp=1&vl=&vh=&sicMin=&sicMax=&insider=CEO&sortcol=0&cnt=50"
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
-    resp = requests.get(url, headers=headers)
-    soup = BeautifulSoup(resp.text, "html.parser")
-    table = soup.find("table", class_="tinytable")
-
-    results = []
-
-    if not table:
-        return results
-
-    rows = table.find_all("tr")[1:]  # Skip header
-    for row in rows:
-        cols = row.find_all("td")
-        if len(cols) < 10:
-            continue
-
-        date = cols[0].text.strip()
-        ticker = cols[2].text.strip()  # ✅ 正确索引
-        owner = cols[3].text.strip()
-        title = cols[4].text.strip()
-        trade_type = cols[5].text.strip()
-        price = cols[6].text.strip().replace('$','')
-        qty = cols[7].text.strip()
-
-        if trade_type != "P - Purchase":
-            continue
-
-        results.append({
-            "ticker": ticker,
-            "ceo": owner,
-            "buy_price": price,
-            "shares": qty,
-            "date": date
-        })
-
-    return results
+from ceo_purchase_scraper import CEOPurchaseScraper
+from telegram_push import send_telegram_message
 
 def main():
-    ceo_buys = fetch_ceo_buys()
+    scraper = CEOPurchaseScraper(pages=10)
+    results = scraper.fetch_data()
 
-    if not ceo_buys:
+    if not results:
         send_telegram_message("😕 今天没有 CEO 买入记录")
         return
 
-    messages = ["🚨 *今日 CEO 买入股票列表*"]
-    for stock in ceo_buys[:5]:  # 取前 5 条展示
+    messages = ["🚨 *今日 CEO 买入数量前 20 名*"]
+    for stock in results[:20]:
         msg = f"""\n📈 *Ticker:* `{stock['ticker']}`
 👤 *CEO:* {stock['ceo']}
-💰 *Buy Price:* ${stock['buy_price']}
 🧮 *Shares:* +{stock['shares']}
-📅 *Date:* {stock['date']}
+💰 *Buy Price:* ${stock['price']}
+📅 *Date:* {stock['trade_date']}
 🔗 [查看 Fintel](https://fintel.io/s/us/{stock['ticker'].lower()})"""
         messages.append(msg)
 
@@ -77,3 +24,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
