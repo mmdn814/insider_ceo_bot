@@ -11,7 +11,6 @@ def send_telegram_message(message):
         "parse_mode": "Markdown"
     }
     response = requests.post(url, data=data)
-    # ✅ 打印返回结果到 GitHub Actions 日志中
     print("Telegram response:", response.status_code, response.text)
     return response.json()
 
@@ -35,16 +34,16 @@ def fetch_ceo_buys():
         if len(cols) < 10:
             continue
 
-        ticker = cols[1].text.strip()
-        owner = cols[5].text.strip()
-        title = cols[6].text.strip()
-        trade_type = cols[7].text.strip()
-        price = cols[8].text.strip()
-        qty = cols[9].text.strip()
         date = cols[0].text.strip()
+        ticker = cols[2].text.strip()  # ✅ 正确索引
+        owner = cols[3].text.strip()
+        title = cols[4].text.strip()
+        trade_type = cols[5].text.strip()
+        price = cols[6].text.strip().replace('$','')
+        qty = cols[7].text.strip()
 
         if trade_type != "P - Purchase":
-            continue  # 只保留公开市场买入
+            continue
 
         results.append({
             "ticker": ticker,
@@ -65,12 +64,12 @@ def main():
 
     messages = ["🚨 *今日 CEO 买入股票列表*"]
     for stock in ceo_buys[:5]:  # 取前 5 条展示
-        msg = f"""\n*Ticker:* {stock['ticker']}
-*CEO:* {stock['ceo']}
-*Buy Price:* {stock['buy_price']}
-*Shares:* {stock['shares']}
-*Date:* {stock['date']}
-[查看 Fintel](https://fintel.io/s/us/{stock['ticker'].lower()})"""
+        msg = f"""\n📈 *Ticker:* `{stock['ticker']}`
+👤 *CEO:* {stock['ceo']}
+💰 *Buy Price:* ${stock['buy_price']}
+🧮 *Shares:* +{stock['shares']}
+📅 *Date:* {stock['date']}
+🔗 [查看 Fintel](https://fintel.io/s/us/{stock['ticker'].lower()})"""
         messages.append(msg)
 
     final_msg = "\n\n".join(messages)
