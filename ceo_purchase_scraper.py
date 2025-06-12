@@ -2,6 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import time
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 class CEOPurchaseScraper:
     def __init__(self):
@@ -32,7 +34,7 @@ class CEOPurchaseScraper:
         results = []
 
         params = {
-            'fd': '1',
+            'fd': '3',   # 最近3天的 Filing Date，兜底防漏
             'td': '0',
             'xp': '1',
             'xs': '1',
@@ -43,65 +45,66 @@ class CEOPurchaseScraper:
             'page': 1
         }
 
-        for attempt in range(self.max_retries):
-            try:
-                resp = requests.get(self.base_url, params=params, headers=self.headers, timeout=10)
-                resp.raise_for_status()
-                soup = BeautifulSoup(resp.content, 'html.parser')
-                table = soup.find('table', {'class': 'tinytable'})
-                if not table:
-                    return []
+        session = requests.Session()
+        retries = Retry(total=3, backoff_factor=1)
+        adapter = HTTPAdapter(max_retries=retries)
+        session.mount("http://", adapter)
 
-                rows = table.find_all('tr')[1:]
-                if not rows:
-                    return []
+        try:
+            resp = session.get(self.base_url, params=params, headers=self.headers, timeout=10)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.content, 'html.parser')
+            table = soup.find('table', {'class': 'tinytable'})
+            if not table:
+                return []
 
-                for row in rows:
-                    cells = row.find_all('td')
-                    if len(cells) < 10:
-                        continue
+            rows = table.find_all('tr')[1:]
+            if not rows:
+                return []
 
-                    trade_date = cells[2].get_text(strip=True)
-                    ticker = cells[3].get_text(strip=True)
-                    insider_name = cells[5].get_text(strip=True)
-                    title = cells[6].get_text(strip=True)
-                    trade_type = cells[7].get_text(strip=True)
-                    price = cells[8].get_text(strip=True)
-                    qty = cells[9].get_text(strip=True)
-                    value = cells[12].get_text(strip=True) if len(cells) > 12 else ''
-                    detail_link = ''
-                    link_cell = cells[0].find('a')
-                    if link_cell:
-                        detail_link = 'http://openinsider.com' + link_cell['href']
+            for row in rows:
+                cells = row.find_all('td')
+                if len(cells) < 10:
+                    continue
 
-                    if ('CEO' not in title.upper()) or ('P' not in trade_type):
-                        continue
+                trade_date = cells[2].get_text(strip=True)
+                ticker = cells[3].get_text(strip=True)
+                insider_name = cells[5].get_text(strip=True)
+                title = cells[6].get_text(strip=True)
+                trade_type = cells[7].get_text(strip=True)
+                price = cells[8].get_text(strip=True)
+                qty = cells[9].get_text(strip=True)
+                value = cells[12].get_text(strip=True) if len(cells) > 12 else ''
+                detail_link = ''
+                link_cell = cells[0].find('a')
+                if link_cell:
+                    detail_link = 'http://openinsider.com' + link_cell['href']
 
-                    if today not in trade_date:
-                        continue
+                # 仍然做 CEO + P-Purchase 筛选
+                if ('CEO' not in title.upper()) or ('P' not in trade_type):
+                    continue
 
-                    shares_int = self.parse_shares(qty)
-                    value_float = self.parse_value(value)
+                # 保留今天的 trade date
+                if today not in trade_date:
+                    continue
 
-                    results.append({
-                        'trade_date': trade_date,
-                        'ticker': ticker,
-                        'ceo': insider_name,
-                        'shares': qty,
-                        'shares_int': shares_int,
-                        'price': price,
-                        'value': value_float,
-                        'detail_link': detail_link
-                    })
+                shares_int = self.parse_shares(qty)
+                value_float = self.parse_value(value)
 
-                time.sleep(0.5)
-                break  # 成功爬取就退出 retry 循环
+                results.append({
+                    'trade_date': trade_date,
+                    'ticker': ticker,
+                    'ceo': insider_name,
+                    'shares': qty,
+                    'shares_int': shares_int,
+                    'price': price,
+                    'value': value_float,
+                    'detail_link': detail_link
+                })
 
-            except Exception as e:
-                print(f"尝试第 {attempt + 1} 次请求失败: {e}")
-                time.sleep(1)
-                continue
+            time.sleep(0.5)
+        except Exception as e:
+            print(f"爬虫异常: {e}")
 
         results.sort(key=lambda x: x['shares_int'], reverse=True)
         return results
-
