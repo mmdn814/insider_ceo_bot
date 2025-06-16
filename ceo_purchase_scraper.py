@@ -34,7 +34,7 @@ class CEOPurchaseScraper:
         results = []
 
         params = {
-            'fd': '3',   # 最近3天的 Filing Date，兜底防漏
+            'fd': '3',   # 最近3天 Filing Date 兜底，防止因延迟漏单
             'td': '0',
             'xp': '1',
             'xs': '1',
@@ -67,6 +67,7 @@ class CEOPurchaseScraper:
                 if len(cells) < 10:
                     continue
 
+                filing_date = cells[1].get_text(strip=True)
                 trade_date = cells[2].get_text(strip=True)
                 ticker = cells[3].get_text(strip=True)
                 insider_name = cells[5].get_text(strip=True)
@@ -80,18 +81,18 @@ class CEOPurchaseScraper:
                 if link_cell:
                     detail_link = 'http://openinsider.com' + link_cell['href']
 
-                # 仍然做 CEO + P-Purchase 筛选
                 if ('CEO' not in title.upper()) or ('P' not in trade_type):
                     continue
 
-                # 保留今天的 trade date
-                if today not in trade_date:
+                # ✅ 核心修正：只判断 Filing Date
+                if today not in filing_date:
                     continue
 
                 shares_int = self.parse_shares(qty)
                 value_float = self.parse_value(value)
 
                 results.append({
+                    'filing_date': filing_date,
                     'trade_date': trade_date,
                     'ticker': ticker,
                     'ceo': insider_name,
