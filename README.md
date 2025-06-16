@@ -1,4 +1,15 @@
-# insider_ceo_bot v3.2.1
+# insider_ceo_bot v3.2.2
+
+
+
+
+🚀 新版修订说明：
+- ✅ 核心逻辑使用 Filing Date 精准过滤每日披露，避免漏单与时间误差；
+- ✅ 其它逻辑稳定继承 v3.2.1 全部评分与推送机制。
+- ✅ 修改时间 6/16/2025
+- ✅ 修改文件 ceo_purchase_scraper.py
+
+
 
 🚀 **全自动 CEO Insider Buy 筛选系统 + 结构评分 + Squeeze评分 (稳定生产版)**
 
