@@ -1,6 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -13,14 +13,6 @@ class CEOPurchaseScraper:
 
     def get_today_date(self):
         return datetime.now().strftime('%Y-%m-%d')
-
-    def get_valid_trade_dates(self):
-        """
-        生成允许的 Trade Date 日期区间（最近 7 天），防止因 SEC 延迟披露而漏单
-        """
-        today = datetime.now().date()
-        valid_dates = [(today - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(8)]
-        return valid_dates
 
     def parse_value(self, val_str):
         if not val_str or val_str == '--':
@@ -39,11 +31,10 @@ class CEOPurchaseScraper:
 
     def fetch_data(self):
         today = self.get_today_date()
-        valid_trade_dates = self.get_valid_trade_dates()
         results = []
 
         params = {
-            'fd': '3',  # Filing Date：最近3天
+            'fd': '7',   # ✅ 拉宽日期范围近7天，防止漏单
             'td': '0',
             'xp': '1',
             'xs': '1',
@@ -55,7 +46,7 @@ class CEOPurchaseScraper:
         }
 
         session = requests.Session()
-        retries = Retry(total=self.max_retries, backoff_factor=1)
+        retries = Retry(total=3, backoff_factor=1)
         adapter = HTTPAdapter(max_retries=retries)
         session.mount("http://", adapter)
 
@@ -93,8 +84,8 @@ class CEOPurchaseScraper:
                 if ('CEO' not in title.upper()) or ('P' not in trade_type):
                     continue
 
-                # Trade Date 容错处理 (最近 4 天内的才接受)
-                if trade_date not in valid_trade_dates:
+                # 只取近 1-2 天的 Trade Date（防止老数据重复）
+                if today not in trade_date:
                     continue
 
                 shares_int = self.parse_shares(qty)
@@ -115,7 +106,6 @@ class CEOPurchaseScraper:
         except Exception as e:
             print(f"爬虫异常: {e}")
 
-        # 按买入数量排序，取前20名
         results.sort(key=lambda x: x['shares_int'], reverse=True)
         return results
 
