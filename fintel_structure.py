@@ -1,73 +1,70 @@
 import requests
-from bs4 import BeautifulSoup
 import time
 
 class FintelStructureScorer:
-
     def __init__(self):
-        self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        self.max_retries = 3
+        self.session = requests.Session()
+        self.session.headers.update({'User-Agent': 'Mozilla/5.0'})
 
     def get_fintel_data(self, ticker):
         url = f"https://fintel.io/s/us/{ticker.lower()}"
-        attempt = 0
-
-        while attempt < self.max_retries:
-            try:
-                resp = requests.get(url, headers=self.headers, timeout=10)
-                resp.raise_for_status()
-                soup = BeautifulSoup(resp.text, 'html.parser')
-
-                insider = self.extract_percent(soup, 'Insider Ownership')
-                institutional = self.extract_percent(soup, 'Institutional Ownership')
-                float_shares = self.extract_float(soup, 'Float Shares')
-                short_interest = self.extract_percent(soup, 'Short Interest')
-
-                # 成功返回数据
-                return {
-                    'insider': insider,
-                    'institutional': institutional,
-                    'float': float_shares,
-                    'short_interest': short_interest
-                }
-
-            except Exception as e:
-                print(f"⚠ 抓取 {ticker} Fintel 失败 (第 {attempt+1} 次): {e}")
-                attempt += 1
-                time.sleep(1)
-
-        # 超过最大重试次数仍失败，返回 None
-        return None
-
-    def extract_percent(self, soup, label):
         try:
-            tag = soup.find("div", string=lambda x: x and label in x)
-            if not tag: return None
-            value = tag.find_next("div").get_text(strip=True)
-            return float(value.replace('%','').replace(',',''))
+            resp = self.session.get(url, timeout=10)
+            resp.raise_for_status()
+            html = resp.text
+
+            insider = self.extract_percentage(html, 'Insider Ownership</a></td><td class="report">')
+            institutional = self.extract_percentage(html, 'Institutional Ownership</a></td><td class="report">')
+            float_val = self.extract_float(html, 'Float</a></td><td class="report">')
+            short_interest = self.extract_percentage(html, 'Short Interest</a></td><td class="report">')
+
+            # ✅ 容忍部分字段缺失
+            data = {
+                'insider': insider if insider is not None else 0,
+                'institutional': institutional if institutional is not None else 0,
+                'float': float_val if float_val is not None else 0,
+                'short_interest': short_interest if short_interest is not None else 0
+            }
+            return data
+
+        except Exception as e:
+            print(f"Fintel 获取失败: {e}")
+            return None
+
+    def extract_percentage(self, html, label):
+        try:
+            idx = html.index(label) + len(label)
+            percent_str = html[idx:idx+30].split('%')[0].strip().replace(',', '')
+            return float(percent_str)
         except:
             return None
 
-    def extract_float(self, soup, label):
+    def extract_float(self, html, label):
         try:
-            tag = soup.find("div", string=lambda x: x and label in x)
-            if not tag: return None
-            value = tag.find_next("div").get_text(strip=True)
-            return float(value.replace('M','').replace(',',''))
+            idx = html.index(label) + len(label)
+            val_str = html[idx:idx+30].split('M')[0].strip().replace(',', '')
+            return float(val_str)
         except:
             return None
 
     def compute_structure_score(self, data):
         score = 0
-        if data['insider'] and data['insider'] > 60: score += 1
-        if data['institutional'] and data['institutional'] < 20: score += 1
-        if data['float'] and data['float'] < 20: score += 1
+        if data['insider'] > 60:
+            score += 1
+        if data['institutional'] < 20:
+            score += 1
+        if data['float'] < 20:
+            score += 1
         return score
 
     def compute_squeeze_score(self, data):
         score = 0
-        if data['short_interest'] and data['short_interest'] > 10: score += 1
-        if data['short_interest'] and data['short_interest'] > 20: score += 1
-        if data['float'] and data['float'] < 20: score += 1
-        if data['insider'] and data['insider'] > 60: score += 1
+        if data['short_interest'] > 10:
+            score += 1
+        if data['short_interest'] > 20:
+            score += 1
+        if data['float'] < 20:
+            score += 1
+        if data['insider'] > 60:
+            score += 1
         return score
